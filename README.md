@@ -12,14 +12,72 @@ A CLI tool that executes SQL queries from a file against a ClickHouse cluster, r
 
 ## Installation
 
-```bash
-uv tool install clickhouse-query-runner
-```
+### uvx (Recommended)
 
-Or run directly without installing:
+Run directly without installing using [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uvx clickhouse-query-runner queries.sql
+```
+
+Or install as a persistent tool:
+
+```bash
+uv tool install clickhouse-query-runner
+clickhouse-query-runner queries.sql
+```
+
+### Docker
+
+Build the image:
+
+```bash
+docker build -t clickhouse-query-runner .
+```
+
+Run with environment variables and a local SQL file:
+
+```bash
+docker run --rm \
+  -e CLICKHOUSE_HOST=clickhouse.example.com \
+  -e CLICKHOUSE_USER=default \
+  -e CLICKHOUSE_PASSWORD=secret \
+  -e CLICKHOUSE_DATABASE=mydb \
+  -v $(pwd)/queries.sql:/app/queries.sql \
+  clickhouse-query-runner /app/queries.sql
+```
+
+Pass additional options after the image name:
+
+```bash
+docker run --rm \
+  -e CLICKHOUSE_HOST=node1.example.com,node2.example.com \
+  -e CLICKHOUSE_USER=default \
+  -e CLICKHOUSE_PASSWORD=secret \
+  -e CLICKHOUSE_DATABASE=mydb \
+  -e VALKEY_URL=redis://valkey:6379/0 \
+  -v $(pwd)/queries.sql:/app/queries.sql \
+  clickhouse-query-runner --concurrency 4 /app/queries.sql
+```
+
+To use with `docker compose`, add the service to your `compose.yaml`:
+
+```yaml
+services:
+  query-runner:
+    build: .
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: secret
+      CLICKHOUSE_DATABASE: mydb
+      VALKEY_URL: redis://valkey:6379/0
+    volumes:
+      - ./queries.sql:/app/queries.sql
+    command: ["/app/queries.sql"]
+    depends_on:
+      - clickhouse
+      - valkey
 ```
 
 ### Development
