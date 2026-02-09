@@ -7,27 +7,70 @@ import logging
 import pathlib
 import sys
 
+import pydantic
 from rich import console
 from rich import logging as rich_logging
 
 from clickhouse_query_runner import parser, runner, settings
 
+LOGGER = logging.getLogger(__name__)
 
-def setup_logging(verbose: bool = False) -> None:
+
+def setup_logging(
+    rich_console: console.Console, verbose: bool = False
+) -> None:
     """Configure logging for the application."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format='%(message)s',
-        handlers=[rich_logging.RichHandler(rich_tracebacks=True)],
+        handlers=[
+            rich_logging.RichHandler(
+                console=rich_console, rich_tracebacks=True
+            )
+        ],
     )
+
+
+def _env_var_for_field(field: str) -> str:
+    """Return the environment variable name for a settings field.
+
+    Fields with a ``validation_alias`` (e.g. ``valkey_url``) use the
+    first alias choice instead of the default ``CLICKHOUSE_`` prefix.
+    """
+    field_info = settings.RunnerSettings.model_fields.get(field)
+    if field_info is not None and isinstance(
+        field_info.validation_alias, pydantic.AliasChoices
+    ):
+        first = field_info.validation_alias.choices[0]
+        if isinstance(first, str):
+            return first
+    return f'CLICKHOUSE_{field.upper()}'
 
 
 def main() -> None:
     """Main entry point."""
-    runner_settings = settings.RunnerSettings()
-    setup_logging(runner_settings.verbose)
     rich_console = console.Console()
+    try:
+        runner_settings = settings.RunnerSettings()
+    except pydantic.ValidationError as err:
+        for error in err.errors():
+            field = '.'.join(str(loc) for loc in error['loc'])
+            flag = field.replace('_', '-')
+            env_var = _env_var_for_field(field)
+            if error['type'] == 'missing':
+                rich_console.print(
+                    f'[red]Missing required setting:[/red] '
+                    f'[bold]{field}[/bold] '
+                    f'(--{flag} or {env_var})'
+                )
+            else:
+                rich_console.print(
+                    f'[red]Invalid value for [bold]{field}[/bold]:[/red] '
+                    f'{error["msg"]}'
+                )
+        sys.exit(1)
+    setup_logging(rich_console, runner_settings.verbose)
 
     query_file = pathlib.Path(runner_settings.query_file)
     if not query_file.exists():
@@ -70,7 +113,7 @@ async def _async_main(
             )
             return
 
-        success = await query_runner.run(queries)
+        success = await query_runner.run(queries, console=rich_console)
 
         if not success:
             failure = query_runner.failure
@@ -88,6 +131,7 @@ async def _async_main(
 
         rich_console.print('[green]All queries completed successfully[/green]')
     except (OSError, ValueError, TypeError, RuntimeError) as err:
+        LOGGER.debug('Fatal error', exc_info=True)
         rich_console.print(f'[red]Error: {err}[/red]')
         sys.exit(1)
     finally:

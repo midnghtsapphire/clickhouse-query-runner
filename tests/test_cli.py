@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import pydantic
+
 from clickhouse_query_runner import cli
 
 
@@ -33,18 +35,75 @@ class SetupLoggingTests(unittest.TestCase):
     def test_default_level(self) -> None:
         import logging
 
-        cli.setup_logging(verbose=False)
+        from rich import console
+
+        cli.setup_logging(console.Console(), verbose=False)
         self.assertEqual(logging.getLogger().level, logging.INFO)
 
     def test_verbose_level(self) -> None:
         import logging
 
-        cli.setup_logging(verbose=True)
+        from rich import console
+
+        cli.setup_logging(console.Console(), verbose=True)
         self.assertEqual(logging.getLogger().level, logging.DEBUG)
+
+
+class EnvVarForFieldTests(unittest.TestCase):
+    """Tests for _env_var_for_field."""
+
+    def test_default_prefix(self) -> None:
+        self.assertEqual(cli._env_var_for_field('host'), 'CLICKHOUSE_HOST')
+
+    def test_validation_alias_field(self) -> None:
+        self.assertEqual(cli._env_var_for_field('valkey_url'), 'VALKEY_URL')
+
+    def test_unknown_field(self) -> None:
+        self.assertEqual(
+            cli._env_var_for_field('nonexistent'), 'CLICKHOUSE_NONEXISTENT'
+        )
 
 
 class MainTests(unittest.TestCase):
     """Tests for main entry point."""
+
+    @mock.patch('clickhouse_query_runner.cli.settings.RunnerSettings')
+    def test_validation_error_missing_fields(
+        self, mock_cls: mock.MagicMock
+    ) -> None:
+        mock_cls.side_effect = pydantic.ValidationError.from_exception_data(
+            'RunnerSettings',
+            [
+                {
+                    'type': 'missing',
+                    'loc': ('host',),
+                    'msg': 'Field required',
+                    'input': {},
+                }
+            ],
+        )
+        with self.assertRaises(SystemExit) as ctx:
+            cli.main()
+        self.assertEqual(ctx.exception.code, 1)
+
+    @mock.patch('clickhouse_query_runner.cli.settings.RunnerSettings')
+    def test_validation_error_invalid_value(
+        self, mock_cls: mock.MagicMock
+    ) -> None:
+        mock_cls.side_effect = pydantic.ValidationError.from_exception_data(
+            'RunnerSettings',
+            [
+                {
+                    'type': 'int_parsing',
+                    'loc': ('concurrency',),
+                    'msg': 'Input should be a valid integer',
+                    'input': 'abc',
+                }
+            ],
+        )
+        with self.assertRaises(SystemExit) as ctx:
+            cli.main()
+        self.assertEqual(ctx.exception.code, 1)
 
     def _make_settings(self, **overrides: object) -> mock.MagicMock:
         defaults = {
