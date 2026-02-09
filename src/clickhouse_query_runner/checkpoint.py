@@ -42,7 +42,7 @@ class CheckpointManager:
             await self.client.ping()
             self._last_connected = time.monotonic()
             LOGGER.debug('Connected to Valkey at %s', self.valkey_url)
-        except (OSError, valkey.exceptions.ValkeyError):
+        except OSError, valkey.exceptions.ValkeyError:
             LOGGER.warning(
                 'Could not connect to Valkey at %s, '
                 'running without checkpointing',
@@ -65,7 +65,7 @@ class CheckpointManager:
         Returns:
             Set of query hashes with status 'completed'.
         """
-        if not self._available:
+        if not self._available or self.client is None:
             return set()
         completed: set[str] = set()
         try:
@@ -87,7 +87,7 @@ class CheckpointManager:
                 if cursor == 0:
                     break
             self._last_connected = time.monotonic()
-        except (OSError, valkey.exceptions.ValkeyError):
+        except OSError, valkey.exceptions.ValkeyError:
             LOGGER.warning('Failed to load checkpoints from Valkey')
             self._check_availability()
         return completed
@@ -134,7 +134,7 @@ class CheckpointManager:
         Returns:
             Number of keys deleted.
         """
-        if not self._available:
+        if not self._available or self.client is None:
             LOGGER.warning('Valkey unavailable, cannot reset checkpoints')
             return 0
         deleted = 0
@@ -152,7 +152,7 @@ class CheckpointManager:
             LOGGER.info(
                 'Cleared %d checkpoints for run %s', deleted, self.run_id
             )
-        except (OSError, valkey.exceptions.ValkeyError):
+        except OSError, valkey.exceptions.ValkeyError:
             LOGGER.warning('Failed to reset checkpoints')
         return deleted
 
@@ -160,13 +160,13 @@ class CheckpointManager:
         self, query_hash: str, data: dict[str, typing.Any]
     ) -> None:
         """Write checkpoint data to Valkey."""
-        if not self._available:
+        if not self._available or self.client is None:
             return
         key = self._key(query_hash)
         try:
             await self.client.setex(key, self.ttl, json.dumps(data))
             self._last_connected = time.monotonic()
-        except (OSError, valkey.exceptions.ValkeyError):
+        except OSError, valkey.exceptions.ValkeyError:
             LOGGER.warning(
                 'Failed to write checkpoint for %s', query_hash[:12]
             )

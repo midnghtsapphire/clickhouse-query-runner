@@ -245,7 +245,7 @@ class QueryRunner:
                     await cursor.execute(
                         'KILL QUERY WHERE user = currentUser()'
                     )
-            except (OSError, asynch_errors.ServerException):
+            except OSError, asynch_errors.ServerException:
                 LOGGER.debug('Error cancelling queries on %s', node)
 
     @property

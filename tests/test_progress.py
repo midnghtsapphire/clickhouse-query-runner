@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from rich import live
 
@@ -128,7 +129,7 @@ class RefreshTests(unittest.TestCase):
 
     def test_refresh_with_live(self) -> None:
         qp = progress.QueryProgress(5)
-        qp._live = unittest.mock.MagicMock()
+        qp._live = mock.MagicMock()
         qp._refresh()
         qp._live.update.assert_called_once()
 

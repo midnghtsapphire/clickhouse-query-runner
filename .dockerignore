@@ -1,0 +1,13 @@
+.git
+.github
+.pre-commit-config.yaml
+.ruff_cache
+__pycache__
+*.egg-info
+*.pyc
+dist
+build
+tests
+coverage.xml
+clickhouse-query-runner-prd.md
+CLAUDE.md
