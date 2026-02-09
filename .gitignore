@@ -1,0 +1,12 @@
+.*
+!/.dockerignore
+!/.github
+!/.gitignore
+!/.pre-commit-config.yaml
+/build
+/dist
+/env
+/.venv
+/VERSION
+/.claude
+**/__pycache__/*
