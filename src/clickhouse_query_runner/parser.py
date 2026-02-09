@@ -16,7 +16,7 @@ def parse_sql_file(file_path: str) -> list[tuple[str, str]]:
     Returns:
         List of (query_hash, query_text) tuples in file order.
     """
-    with open(file_path) as fh:  # noqa: S108
+    with open(file_path, encoding='utf-8') as fh:
         content = fh.read()
 
     statements = _split_statements(content)

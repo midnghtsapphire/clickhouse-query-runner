@@ -314,39 +314,58 @@ class PollProgressTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancellation(self) -> None:
         qr = runner.QueryRunner(_make_settings(host='n1', poll_interval=0.001))
-        conn = _mock_conn(fetchone_return=None)
-        qr.connections = {'n1': conn}
-        task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
-        await asyncio.sleep(0.05)
-        task.cancel()
-        # _poll_progress catches CancelledError and returns
-        await task
+        poll_conn = _mock_conn(fetchone_return=None)
+        with mock.patch(
+            'asynch.connection.Connection', return_value=poll_conn
+        ):
+            task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            # _poll_progress catches CancelledError and returns
+            await task
         self.assertTrue(task.done())
 
     async def test_updates_progress_on_row(self) -> None:
         qr = runner.QueryRunner(_make_settings(host='n1', poll_interval=0.001))
-        conn = _mock_conn(fetchone_return=('qid', 500, 1000, 2.5, 50.0))
-        qr.connections = {'n1': conn}
+        poll_conn = _mock_conn(fetchone_return=('qid', 500, 1000, 2.5, 50.0))
         mock_progress = mock.MagicMock()
         qr._progress = mock_progress
-        task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
-        await asyncio.sleep(0.05)
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        with mock.patch(
+            'asynch.connection.Connection', return_value=poll_conn
+        ):
+            task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         mock_progress.update_query.assert_called()
 
     async def test_handles_server_error(self) -> None:
         qr = runner.QueryRunner(_make_settings(host='n1', poll_interval=0.001))
-        conn = _mock_conn(
+        poll_conn = _mock_conn(
             execute_side_effect=asynch_errors.ServerException('err', 62)
         )
-        qr.connections = {'n1': conn}
-        task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
-        await asyncio.sleep(0.05)
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        with mock.patch(
+            'asynch.connection.Connection', return_value=poll_conn
+        ):
+            task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def test_closes_connection_on_cancel(self) -> None:
+        qr = runner.QueryRunner(_make_settings(host='n1', poll_interval=0.001))
+        poll_conn = _mock_conn(fetchone_return=None)
+        with mock.patch(
+            'asynch.connection.Connection', return_value=poll_conn
+        ):
+            task = asyncio.create_task(qr._poll_progress('n1', 'qid'))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        poll_conn.close.assert_awaited_once()
 
 
 class CancelInFlightTests(unittest.IsolatedAsyncioTestCase):

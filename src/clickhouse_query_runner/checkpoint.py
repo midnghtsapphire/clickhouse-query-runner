@@ -42,7 +42,7 @@ class CheckpointManager:
             await self.client.ping()
             self._last_connected = time.monotonic()
             LOGGER.debug('Connected to Valkey at %s', self.valkey_url)
-        except OSError, valkey.exceptions.ValkeyError:
+        except (OSError, valkey.exceptions.ValkeyError):  # fmt: skip
             LOGGER.warning(
                 'Could not connect to Valkey at %s, '
                 'running without checkpointing',
@@ -87,7 +87,7 @@ class CheckpointManager:
                 if cursor == 0:
                     break
             self._last_connected = time.monotonic()
-        except OSError, valkey.exceptions.ValkeyError:
+        except (OSError, valkey.exceptions.ValkeyError):  # fmt: skip
             LOGGER.warning('Failed to load checkpoints from Valkey')
             self._check_availability()
         return completed
@@ -152,7 +152,7 @@ class CheckpointManager:
             LOGGER.info(
                 'Cleared %d checkpoints for run %s', deleted, self.run_id
             )
-        except OSError, valkey.exceptions.ValkeyError:
+        except (OSError, valkey.exceptions.ValkeyError):  # fmt: skip
             LOGGER.warning('Failed to reset checkpoints')
         return deleted
 
@@ -166,7 +166,7 @@ class CheckpointManager:
         try:
             await self.client.setex(key, self.ttl, json.dumps(data))
             self._last_connected = time.monotonic()
-        except OSError, valkey.exceptions.ValkeyError:
+        except (OSError, valkey.exceptions.ValkeyError):  # fmt: skip
             LOGGER.warning(
                 'Failed to write checkpoint for %s', query_hash[:12]
             )

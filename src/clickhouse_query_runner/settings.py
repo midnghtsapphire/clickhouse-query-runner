@@ -40,7 +40,7 @@ class RunnerSettings(pydantic_settings.BaseSettings):
         default='redis://localhost:6379/0',
         description='Valkey connection URL',
         alias='valkey-url',
-        validation_alias='VALKEY_URL',
+        validation_alias=pydantic.AliasChoices('VALKEY_URL', 'valkey-url'),
     )
     checkpoint_ttl: int = pydantic.Field(
         default=604800,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import itertools
 import logging
@@ -157,8 +158,7 @@ class QueryRunner:
         try:
             conn = self.connections[node]
             async with conn.cursor() as cursor:
-                cursor._query_id = query_id
-                await cursor.execute(query_text)
+                await cursor.execute(query_text, query_id=query_id)
                 rows_read = cursor.rowcount or 0
 
             elapsed = time.monotonic() - start_time
@@ -207,13 +207,27 @@ class QueryRunner:
             semaphore.release()
 
     async def _poll_progress(self, node: str, query_id: str) -> None:
-        """Poll system.processes for query progress."""
+        """Poll system.processes for query progress.
+
+        Uses a dedicated connection to avoid concurrent cursor operations
+        on the same connection used for query execution (the asynch native
+        TCP protocol does not support multiplexed operations).
+        """
         await asyncio.sleep(self.settings.poll_interval)
+        poll_conn: asynch_connection.Connection | None = None
         try:
+            poll_conn = asynch_connection.Connection(
+                host=node,
+                port=self.settings.port,
+                database=self.settings.database,
+                user=self.settings.user,
+                password=(self.settings.password.get_secret_value()),
+                secure=self.settings.secure,
+            )
+            await poll_conn.connect()
             while True:
                 try:
-                    conn = self.connections[node]
-                    async with conn.cursor() as cursor:
+                    async with poll_conn.cursor() as cursor:
                         await cursor.execute(
                             PROGRESS_QUERY, {'query_id': query_id}
                         )
@@ -235,6 +249,10 @@ class QueryRunner:
                 await asyncio.sleep(self.settings.poll_interval)
         except asyncio.CancelledError:
             return
+        finally:
+            if poll_conn is not None:
+                with contextlib.suppress(OSError):
+                    await poll_conn.close()
 
     async def _cancel_in_flight(self) -> None:
         """Cancel all in-flight queries on all nodes."""
@@ -245,7 +263,7 @@ class QueryRunner:
                     await cursor.execute(
                         'KILL QUERY WHERE user = currentUser()'
                     )
-            except OSError, asynch_errors.ServerException:
+            except (OSError, asynch_errors.ServerException):  # fmt: skip
                 LOGGER.debug('Error cancelling queries on %s', node)
 
     @property

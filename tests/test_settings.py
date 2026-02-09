@@ -69,6 +69,35 @@ class RunnerSettingsTests(unittest.TestCase):
         s = self._make_settings()
         self.assertEqual(s.query_file, 'test.sql')
 
+    def test_valkey_url_cli_flag(self) -> None:
+        import sys
+
+        from clickhouse_query_runner import settings
+
+        orig_env = os.environ.copy()
+        orig_argv = sys.argv[:]
+        try:
+            os.environ.update(
+                {
+                    'CLICKHOUSE_HOST': 'localhost',
+                    'CLICKHOUSE_DATABASE': 'default',
+                    'CLICKHOUSE_USER': 'user',
+                    'CLICKHOUSE_PASSWORD': 'pass',
+                }
+            )
+            sys.argv = [
+                'clickhouse-query-runner',
+                '--valkey-url',
+                'redis://cli-flag:6379/2',
+                'test.sql',
+            ]
+            s = settings.RunnerSettings()
+            self.assertEqual(s.valkey_url, 'redis://cli-flag:6379/2')
+        finally:
+            os.environ.clear()
+            os.environ.update(orig_env)
+            sys.argv = orig_argv
+
     def test_concurrency_validation_zero(self) -> None:
         import pydantic
 
